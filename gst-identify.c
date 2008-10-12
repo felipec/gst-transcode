@@ -93,8 +93,9 @@ show_caps (GstCaps *caps)
     {
         GstStructure *struc;
         struc = gst_caps_get_structure (caps, i);
-        g_print ("=%s=\n", gst_structure_get_name (struc));
+        g_print ("%s\n", gst_structure_get_name (struc));
         gst_structure_foreach (struc, show_field, NULL);
+        g_print ("\n");
     }
 }
 
