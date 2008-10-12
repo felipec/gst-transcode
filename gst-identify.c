@@ -198,9 +198,9 @@ continue_cb (GstElement *bin,
 }
 
 static void
-test (const char *location)
+identify (const char *location)
 {
-    pipeline = gst_pipeline_new ("gst-transcode");
+    pipeline = gst_pipeline_new ("gst-identify");
 
     {
         GstBus *bus;
@@ -231,7 +231,7 @@ main (int argc,
     gst_init (&argc, &argv);
     loop = g_main_loop_new (NULL, FALSE);
 
-    test ("/data/public/videos/cc/big_buck_bunny_720p_h264.mkv");
+    identify (argv[1]);
     
     return 0;
 }
