@@ -53,8 +53,8 @@ show_field (GQuark field_id,
             if (GST_VALUE_HOLDS_FRACTION (value))
             {
                 tmp = g_strdup_printf ("%i/%i",
-                                       gst_value_get_fraction_denominator (value),
-                                       gst_value_get_fraction_numerator (value));
+                                       gst_value_get_fraction_numerator (value),
+                                       gst_value_get_fraction_denominator (value));
                 type = "fraction";
                 break;
             }
