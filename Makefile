@@ -1,16 +1,16 @@
-GST_LIBS=`pkg-config --libs gstreamer-0.10 gstreamer-base-0.10`
-GST_CFLAGS=`pkg-config --cflags gstreamer-0.10 gstreamer-base-0.10`
+CC ?= gcc
+CFLAGS ?= -Wall -ggdb -ansi -std=c99
 
-CC=gcc
-CFLAGS=-Wall -ggdb -ansi -std=c99
+GST_LIBS := $(shell pkg-config --libs gstreamer-0.10)
+GST_CFLAGS := $(shell pkg-config --cflags gstreamer-0.10)
 
-binary=gst-transcode
+bins += gst-identify
 
-all: $(binary)
+all: $(bins)
 
-$(binary): main.o
-$(binary): CFLAGS := $(CFLAGS) $(GST_CFLAGS) -I$(KERNEL)/arch/arm/plat-omap/include
-$(binary): LIBS := $(GST_LIBS)
+gst-identify: gst-identify.o
+gst-identify: CFLAGS := $(CFLAGS) $(GST_CFLAGS)
+gst-identify: LIBS := $(GST_LIBS)
 
 # from Lauri Leukkunen's build system
 ifdef V
@@ -23,12 +23,12 @@ endif
 
 %.o:: %.c
 	$(P)CC
-	$(Q)$(CC) $(CFLAGS) -Wp,-MMD,$(dir $@).$(notdir $@).d -o $@ -c $<
+	$(Q)$(CC) $(CFLAGS) -MMD -o $@ -c $<
 
-$(binary):
+$(bins):
 	$(P)LINK
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
-	find -name '*.o' -delete
-	rm -f $(binary)
+	$(Q)find -name '*.o' -o -name '*.d' | xargs rm -f
+	$(Q)rm -f $(bins)
