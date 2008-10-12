@@ -21,8 +21,6 @@
 static GstElement *pipeline;
 static GstElement *src;
 static GstElement *decodebin;
-static GstElement *muxer;
-static GstElement *sink;
 
 static GMainLoop *loop;
 
@@ -220,15 +218,6 @@ test (const char *location)
     gst_element_link_pads (src, "src", decodebin, "sink");
 
     g_signal_connect (decodebin, "autoplug-continue", G_CALLBACK (continue_cb), NULL);
-
-    muxer = gst_element_factory_make ("matroskamux", "muxer");
-    gst_bin_add (GST_BIN (pipeline), muxer);
-
-    sink = gst_element_factory_make ("filesink", "sink");
-    g_object_set (G_OBJECT (sink), "location", "foobar", NULL);
-    gst_bin_add (GST_BIN (pipeline), sink);
-
-    gst_element_link_pads (muxer, "src", sink, "sink");
 
     gst_element_set_state (pipeline, GST_STATE_PLAYING);
     g_main_loop_run (loop);
