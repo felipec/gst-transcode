@@ -60,6 +60,7 @@ show_field (GQuark field_id,
             }
 #if 0
             tmp = g_strdup_printf ("(%s) unknown", G_VALUE_TYPE_NAME (value));
+            type = "unknown";
 #else
             goto leave;
 #endif
