@@ -20,11 +20,118 @@
 
 static GstElement *pipeline;
 static GstElement *src;
-static GstElement *demuxer;
+static GstElement *decodebin;
 static GstElement *muxer;
 static GstElement *sink;
 
-GMainLoop *loop;
+static GMainLoop *loop;
+
+static gboolean
+show_field (GQuark field_id,
+            const GValue *value,
+            gpointer user_data)
+{
+    const gchar *field;
+    gchar *tmp;
+    const gchar *type;
+
+    field = g_quark_to_string (field_id);
+
+    switch (G_VALUE_TYPE (value))
+    {
+        case G_TYPE_BOOLEAN:
+            tmp = g_strdup_printf ("%s", g_value_get_boolean (value) ? "true" : "false");
+            type = "bool";
+            break;
+        case G_TYPE_INT:
+            tmp = g_strdup_printf ("%i", g_value_get_int (value));
+            type = "int";
+            break;
+        case G_TYPE_STRING:
+            tmp = g_strdup_printf ("%s", g_value_get_string (value));
+            type = "string";
+            break;
+        default:
+            if (GST_VALUE_HOLDS_FRACTION (value))
+            {
+                tmp = g_strdup_printf ("%i/%i",
+                                       gst_value_get_fraction_denominator (value),
+                                       gst_value_get_fraction_numerator (value));
+                type = "fraction";
+                break;
+            }
+#if 0
+            tmp = g_strdup_printf ("(%s) unknown", G_VALUE_TYPE_NAME (value));
+#else
+            goto leave;
+#endif
+            break;
+    }
+
+    g_print ("%s: %s: %s\n", field, type, tmp);
+
+    g_free (tmp);
+
+leave:
+    return TRUE;
+}
+
+static void
+show_caps (GstCaps *caps)
+{
+    guint i;
+
+#if 0
+    {
+        gchar *tmp;
+        tmp = gst_caps_to_string (caps);
+        g_debug ("caps [%s]", tmp);
+        g_free (tmp);
+    }
+#endif
+
+    for (i = 0; i < gst_caps_get_size (caps); i++)
+    {
+        GstStructure *struc;
+        struc = gst_caps_get_structure (caps, i);
+        g_print ("=%s=\n", gst_structure_get_name (struc));
+        gst_structure_foreach (struc, show_field, NULL);
+    }
+}
+
+static void
+show_info (void)
+{
+    GstIterator *it;
+    gboolean done = FALSE;
+    gpointer item;
+
+    it = gst_element_iterate_src_pads (decodebin);
+
+    while (!done)
+    {
+        switch (gst_iterator_next (it, &item))
+        {
+            case GST_ITERATOR_OK:
+                {
+                    GstPad *pad;
+                    GstCaps *caps;
+                    pad = GST_PAD (item);
+                    caps = gst_pad_get_caps (pad);
+                    show_caps (caps);
+                    gst_caps_unref (caps);
+                }
+                break;
+            case GST_ITERATOR_DONE:
+                done = TRUE;
+                break;
+            default:
+                break;
+        }
+    }
+
+    gst_iterator_free (it);
+}
 
 static gboolean
 bus_cb (GstBus *bus,
@@ -53,6 +160,23 @@ bus_cb (GstBus *bus,
                 g_main_loop_quit (loop);
                 break;
             }
+        case GST_MESSAGE_STATE_CHANGED:
+            {
+                if (msg->src == GST_OBJECT (decodebin))
+                {
+                    GstState old, new, pending;
+                    gst_message_parse_state_changed (msg, &old, &new, &pending);
+#if 0
+                    g_debug ("state changed: %s: %u, %u, %u", GST_OBJECT_NAME (msg->src), old, new, pending);
+#endif
+                    if (new == GST_STATE_PAUSED)
+                    {
+                        show_info ();
+                        g_main_loop_quit (loop);
+                    }
+                }
+                break;
+            }
         default:
             break;
     }
@@ -60,54 +184,18 @@ bus_cb (GstBus *bus,
     return TRUE;
 }
 
-static void
-pad_added_cb (GstElement *element,
-              GstPad *pad,
-              gpointer data)
+static gboolean
+continue_cb (GstElement *bin,
+             GstPad *pad,
+             GstCaps *caps,
+             gpointer user_data)
 {
-    GstCaps *caps;
-    GstStructure *str;
+    static guint count = 0;
 
-    caps = gst_pad_get_caps (pad);
-    str = gst_caps_get_structure (caps, 0);
+    if (count++ == 0)
+        return TRUE;
 
-    {
-        gchar *tmp;
-        tmp = gst_caps_to_string (caps);
-        g_debug ("caps [%s]", tmp);
-        g_free (tmp);
-    }
-
-    if (g_strrstr (gst_structure_get_name (str), "video"))
-    {
-        GstPad *sinkpad;
-        {
-            gint width, height;
-            g_print ("name: %s\n", gst_structure_get_name (str));
-            if (gst_structure_get_int (str, "width", &width))
-                g_print ("width: %i\n", width);
-            if (gst_structure_get_int (str, "height", &height))
-                g_print ("width: %i\n", height);
-        }
-        sinkpad = gst_element_get_request_pad (muxer, "video_%d");
-        gst_pad_link (pad, sinkpad);
-        gst_object_unref (sinkpad);
-    }
-
-    if (g_strrstr (gst_structure_get_name (str), "audio"))
-    {
-        g_debug ("audio pad");
-        {
-            gint channels, rate;
-            g_print ("name: %s\n", gst_structure_get_name (str));
-            if (gst_structure_get_int (str, "channels", &channels))
-                g_print ("channels: %i\n", channels);
-            if (gst_structure_get_int (str, "rate", &rate))
-                g_print ("rate: %i\n", rate);
-        }
-    }
-
-    gst_caps_unref (caps);
+    return FALSE;
 }
 
 static void
@@ -126,12 +214,12 @@ test (const char *location)
     g_object_set (G_OBJECT (src), "location", location, NULL);
     gst_bin_add (GST_BIN (pipeline), src);
 
-    demuxer = gst_element_factory_make ("matroskademux", "demuxer");
-    gst_bin_add (GST_BIN (pipeline), demuxer);
+    decodebin = gst_element_factory_make ("decodebin2", "decodebin");
+    gst_bin_add (GST_BIN (pipeline), decodebin);
 
-    gst_element_link_pads (src, "src", demuxer, "sink");
+    gst_element_link_pads (src, "src", decodebin, "sink");
 
-    g_signal_connect (demuxer, "pad-added", G_CALLBACK (pad_added_cb), NULL);
+    g_signal_connect (decodebin, "autoplug-continue", G_CALLBACK (continue_cb), NULL);
 
     muxer = gst_element_factory_make ("matroskamux", "muxer");
     gst_bin_add (GST_BIN (pipeline), muxer);
